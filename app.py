@@ -1,141 +1,160 @@
-from atlassian import Confluence
+"""
+Export a Confluence site to PDF
+"""
 import os
-import json
 import csv
-import pprint
 from pathlib import Path
 from datetime import datetime
+from atlassian import Confluence
 
-
-opUser = os.environ['OP_USER']
-opPass = os.environ['OP_PASS']
+op_user = os.environ['OP_USER']
+op_pass = os.environ['OP_PASS']
 
 now = datetime.now()
 readableDate = now.strftime("%m/%d/%Y, %H:%M:%S")
 
 # Edit these variables only
-googleDriveBase = "/your/location"
-confluenceServer = "http://1.1.1.1:8090"
+GOOGLE_DRIVE_BASE = "/your/location/"
+CONFLUENCE_SERVER = "http://1.1.1.1:8090"
 
 sites = { "SiteKey1", "SiteKey2", "SiteKey3"}
 
 confluence = Confluence(
-    url=confluenceServer,
-    username=opUser,
-    password=opPass)
+    url = CONFLUENCE_SERVER,
+    username=op_user,
+    password=op_pass)
 
-# Define a very simple logging function
-def logProgress(logMessage):
-    f = open(googleDriveBase+"pdf-export-log.log", "a")
-    f.write(str(readableDate)+" | "+logMessage+"\r\n")
-    f.close()
+def log_progress(log_message):
+    """
+    Log a message to a file
+    :param log_message: the message to log
+    """
+    with open(f'{GOOGLE_DRIVE_BASE}pdf-export-log.log', "a", encoding="utf-8") as f:
+        f.write(str(readableDate)+" | "+log_message+"\r\n")
+        f.close()
 
-# Simple writing of completed sites
-def writeSitesDone(site):
-    sitesDone = open(googleDriveBase+"sites_done.csv", "a")
-    sitesDone.write(site+",")
-    sitesDone.close()
+def write_sites_done(site_name):
+    """
+    Log the given site as done
+    :param site: name of the site which is done
+    """
+    with open(f'{GOOGLE_DRIVE_BASE}sites_done.csv', "a", encoding="utf-8") as sites_done:
+        sites_done.write(f'{site_name},')
+        sites_done.close()
 
-def isSiteDone(site):
-    
-    logProgress("- Checking to see if ("+site+") has been complete.")
+def is_site_done(site_name):
+    """
+    Check if a site has been processed already
+    :param site_name: site to check
+    :return: True if the site has previously been completed, otherwise False
+    """
+    log_progress(f'- Checking to see if ({site_name}) has been completed.')
 
-    with open(googleDriveBase+"sites_done.csv", "r") as sites:
-        csv_reader = csv.reader(sites)
+    with open(f'{GOOGLE_DRIVE_BASE}sites_done.csv', "r", encoding="utf-8") as sites_done:
+        csv_reader = csv.reader(sites_done)
         for row in (csv_reader):
-
-            if(site == row[0]):
-                logProgress("- ("+site+") has been completed.")
+            if site_name == row[0]:
+                log_progress(f'- ({site_name}) has been completed.')
                 return True
-            else:
-                logProgress("- ("+site+") has not been complete.")
-                return False
-
-
+            log_progress(f'- ({site_name}) has not been completed.')
+            return False
 
 # Create the PDF based on the data provided, file it in the appropriate folder
-def createPDF(pageId, title, savePath):
+def create_pdf(page_id, title, save_path):
+    """
+    Create a PDF from the page and save it
+    :param page_id: page for which to create the PDF
+    :param save_path: path to save PDF
+    """
+    full_path = save_path + title + ".pdf"
 
-    fullPath = savePath+title+".pdf"
-
-    if(os.path.isfile(fullPath) == False):
-        logProgress("Working on File ("+fullPath+")")
+    if os.path.isfile(full_path) is False:
+        log_progress(f'Working on File ({full_path})')
         try:
-            pdfData = confluence.export_page(pageId)
-        except:
-            logProgress("- ERROR PDF not created for file ("+fullPath+")")
+            pdf_data = confluence.get_page_as_pdf(page_id)
+        except Exception:
+            log_progress(f'- ERROR PDF not created for file ({full_path})')
         else:
-            Path(savePath).mkdir(parents=True, exist_ok=True)
-            f = open(fullPath, "wb")
-            f.write(pdfData)
-            f.close()
-            logProgress("- File created ("+fullPath+")")
+            Path(save_path).mkdir(parents=True, exist_ok=True)
+            with open(full_path, "wb") as f:
+                f.write(pdf_data)
+                f.close()
+            log_progress(f'- File created ({full_path})')
     else:
-        logProgress("- File found, skipping ("+fullPath+")")
+        log_progress(f'- File found, skipping ({full_path})')
 
-# Download the attachment, file it in the appropriate folder
-def downloadAttachment(pageId, savePath):
-
+def download_attachment(page_id, save_path):
+    """
+    Download an attachment from the page and save it
+    :param page_id: page from which to download attachments
+    :param save_path: path to save attachments
+    """
     try:
-        getAttachments = confluence.download_attachments_from_page(pageId, path=savePath)
-    except:
-        logProgress("-- Downloading attachments for this page failed.")
+        attachments = confluence.download_attachments_from_page(page_id, path=save_path)
+    except Exception:
+        log_progress("-- Downloading attachments for this page failed.")
     else:
-        logProgress("-- Downloaded attachments for this page")
+        log_progress("-- Downloaded attachments for this page")
 
 
-def cleanString(string):
-    returnVar = ''.join(letter for letter in string if letter.isalnum())
-    return returnVar
+def clean_string(string):
+    """
+    Clean non alphnumeric characters from a string
+    :param string: string to be cleaned
+    :return: cleaned string
+    """
+    return ''.join(letter for letter in string if letter.isalnum())
 
-def getPages(pageId, savePath):
-
+def export_pages(page_id, save_path):
+    """
+    Export the page and all children to PDF, saving in the given directory
+    :param page_id: id of the page to export
+    :param save_path: path to save the PDFs and attachments to
+    """
     # Get the page data
-    pageData = confluence.get_page_by_id(pageId, expand='children.page', status=None, version=None)
+    page_data = confluence.get_page_by_id(page_id, expand='children.page',
+                                          status=None, version=None)
 
     # Export the page
-    createPDF(pageId, cleanString(pageData['title']), savePath)
+    create_pdf(page_id, clean_string(page_data['title']), save_path)
 
     # Grab the attachments
-    downloadAttachment(pageId, savePath)
+    download_attachment(page_id, save_path)
 
     # Check for children
-    for child in pageData['children']['page']['results']:
+    for child in page_data['children']['page']['results']:
+        export_pages(child['id'], save_path + clean_string(child['title']) + "/")
 
-        getPages(child['id'], savePath+cleanString(child['title'])+"/")
+if __name__ == "__main__":
+    log_progress("Tool Started")
 
-logProgress("Tool Started")
+    # Work through each site
+    for site in sites:
+        log_progress(f'- ({site}) selected')
+        # Before we start, have we processed this site already?
+        if is_site_done(site) is False:
+            # We need a bit of code to deal with the pagination from Confluence,
+            # These settings permit showing 2000 pages which exceeds the size
+            # of the largest site we have.
+            page_ids = []
+            for i in range(20):
+                # Establish the first item we request in the list
+                apistartPoint = i * 100
 
-# Work through each site
-for site in sites:
+                # Grab the first/next 100 pages
+                pages = confluence.get_all_pages_from_space(site, start=apistartPoint,
+                  limit=100, status=None,
+                  expand="ancestors", content_type='page')
 
-    logProgress("- ("+site+") selected")
+                # Cycle through the pages, save the ids to a sequence
+                for page in pages:
+                    if len(page['ancestors']) == 0:
+                        page_ids.append(page['id'])
 
+            # Now get the pages from Confluence and save them to the folder.
+            for page in page_ids:
+                log_progress(f'- Beginning work on ({site}) with root page ({page})')
+                export_pages(page, f'{GOOGLE_DRIVE_BASE}{site}/')
 
-    # Before we start, have we processed this site already?
-    if(isSiteDone(site) == False):
-
-        # We need a bit of code to deal with the pagination from Confluence, these settings permit showing 2000 pages. Which exceeds the size of the largest site we have. 
-        pageIds = list()
-        for i in range(20):
-
-            # Establish the first item we request in the list
-            apistartPoint = i * 100
-
-            # Grab the first/next 100 pages
-            pages = confluence.get_all_pages_from_space(site, start=apistartPoint, limit=100, status=None, expand="ancestors", content_type='page')
-
-            # Cycle through the pages, save the Ids to a dict()
-            for page in pages:
-
-                if(len(page['ancestors']) == 0):
-
-                    pageIds.append(page['id'])
-
-        for page in pageIds:
-
-            logProgress("- Beginning work on ("+site+") with root page ("+page+")")
-            getPages(page, googleDriveBase+site+"/")
-
-logProgress("- Site ("+site+") complete")
-writeSitesDone(site)
+    log_progress(f'- Site ({site}) complete')
+    write_sites_done(site)
