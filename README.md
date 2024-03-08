@@ -11,7 +11,7 @@ Should you feel motivated to use this tool, the folllowing setup is required.
 5. Run '. ./venv/bin/activate'
 6. run 'pip install atlassian-python-api'
 7. Export Variables to allow basic auth to your on-premises confluence server (export OP_USER=<your username>, export OP_PASS=<your password>
-8. Set appropriate values within app.py for 'googleDriveBase' and 'confluenceServer'
+8. Set appropriate values within app.py for 'googleDriveBase' and 'confluenceServer' and 'sites' (the latter being the sitekeys you wish to export)
 9. Run the code with 'python3 app.py'
 
 # Monitoring
